@@ -1,10 +1,12 @@
 package com.grocer.service;
 
 import com.grocer.model.Orderable;
+import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.util.List;
 
+@Service
 public class Register {
 
     public double getTax(Orderable product){

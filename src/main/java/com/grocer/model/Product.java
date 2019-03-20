@@ -3,6 +3,7 @@ package com.grocer.model;
 import lombok.*;
 
 import javax.persistence.Entity;
+import javax.persistence.Id;
 import java.io.Serializable;
 
 @AllArgsConstructor
@@ -15,6 +16,9 @@ public class Product implements Serializable, Orderable {
     private double price;
     private String name;
     private String description;
+
+    @Id
+    private Integer id;
 
     @Override
     public double getTax() {

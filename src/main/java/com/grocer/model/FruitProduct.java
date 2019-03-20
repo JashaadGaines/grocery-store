@@ -4,7 +4,6 @@ import lombok.Data;
 
 import java.util.Date;
 
-@Data
 public class FruitProduct extends Product {
 
     Date eatBy;

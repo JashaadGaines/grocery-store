@@ -163,154 +163,27 @@ tasks.withType(JavaCompile) {
     options.compilerArgs += ['-Xlint:all,-processing,-serial', '-Werror']
 }
 
-task databaseTest(type: Test) {
-    group = 'verification'
-    description = 'Runs database tests.'
-    testClassesDirs = sourceSets.databaseTest.output.classesDirs
-    classpath = sourceSets.databaseTest.runtimeClasspath
-    shouldRunAfter test
-}
-
-task integrationTest(type: Test) {
-    group = 'verification'
-    description = 'Runs API integration tests.'
-    testClassesDirs = sourceSets.integrationTest.output.classesDirs
-    classpath = sourceSets.integrationTest.runtimeClasspath
-    shouldRunAfter databaseTest
-}
-
-task apiTest(type: Exec) {
-    group 'verification'
-    description 'Runs the API tests locally.'
-    workingDir 'api-test'
-    commandLine './dev-local-run-api-tests'
-}
-
-jacoco {
-    toolVersion = jacocoVersion
-}
-
-jacocoTestReport {
-    sourceSets sourceSets.main
-    executionData test, databaseTest, integrationTest
-
-    reports {
-        csv.enabled = false
-        html.enabled = true
-        xml.enabled = false
-    }
-
-    afterEvaluate {
-        files(classDirectories.files.collect {
-            fileTree(dir: it, exclude: excludedFiles)
-        })
-    }
-
-    dependsOn test, databaseTest, integrationTest
-}
-
-jacocoTestCoverageVerification {
-    violationRules {
-        rule {
-            limit {
-                counter = 'INSTRUCTION'
-                minimum = 0.93
-            }
-        }
-        rule {
-            limit {
-                counter = 'BRANCH'
-                minimum = 0.86
-            }
-        }
-        rule {
-            limit {
-                counter = 'LINE'
-                minimum = 0.94
-            }
-        }
-        rule {
-            limit {
-                element = 'CLASS'
-                counter = 'LINE'
-                minimum = 0.00
-            }
-        }
-    }
-
-    afterEvaluate {
-        classDirectories = files(classDirectories.files.collect {
-            fileTree(dir: it, excludes: excludedFiles)
-        })
-    }
-
-    dependsOn jacocoTestReport
-}
-
-spotbugs {
-    toolVersion = spotbugsVersion
-    // TODO: Remove configuration after https://github.com/spotbugs/spotbugs-gradle-plugin/issues/5 closed
-    excludeFilter = file("${project.rootDir}/config/spotbugs/excludeFilter.xml")
-}
-
-tasks.withType(com.github.spotbugs.SpotBugsTask) {
-    showProgress = false
-
-    reports {
-        xml.enabled false
-        html.enabled true
-    }
-}
-
-checkstyle {
-    toolVersion = checkstyleVersion
-}
-
-tasks.withType(Checkstyle) {
-    maxWarnings = 0
-
-    reports {
-        html.enabled = true
-        xml.enabled = false
-    }
-}
-
 liquibase {
     /* For rollback, try `./run-prime.sh rollback-liquibase 1`  # rollsback most recent changelog */
     activities {
         test {
-            changeLogFile 'src/main/resources/data/changelog/db.changelog-master.xml'
+            changeLogFile 'src/main/resources/db/changelog/db.changelog-master.yaml'
             classpath 'src/main/resources'
-            url 'jdbc:postgresql://localhost/prime-test?useSSL=false&currentSchema=public'
-            username 'primeApp'
+            url 'jdbc:postgresql://localhost/grocerystore?useSSL=false&currentSchema=public'
+            username 'admin'
             password 'password'
         }
 
         run {
-            changeLogFile 'src/main/resources/data/changelog/db.changelog-master.xml'
+            changeLogFile 'src/main/resources/db/changelog/db.changelog-master.yaml'
             classpath 'src/main/resources'
-            url 'jdbc:postgresql://localhost/prime?useSSL=false&currentSchema=public'
-            username 'primeApp'
+            url 'jdbc:postgresql://localhost/grocerystore?useSSL=false&currentSchema=public'
+            username 'admin'
             password 'password'
         }
     }
 }
 
-sonarqube {
-    properties {
-        property "sonar.host.url", System.getenv("SONAR_HOST")
-        property "sonar.projectKey", "com.sysco.prime.api:prime-api"
-        property "sonar.projectName", "Prime API"
-        properties["sonar.tests"] += sourceSets.databaseTest.allJava.srcDirs
-        properties["sonar.tests"] += sourceSets.integrationTest.allJava.srcDirs
-        property "sonar.exclusions", excludedFiles.collect { filename -> filename.replace("com/sysco/", "**/") }.join(",")
-        property "sonar.coverage.exclusions", excludedFiles.collect { filename -> filename.replace("com/sysco/", "**/") }.join(",")
-    }
-}
-
-check {
-    dependsOn jacocoTestCoverageVerification
-}
 
 bootJar {
     bootInf {
@@ -331,9 +204,4 @@ docker {
     copySpec.into('build/libs')
 
     dependsOn bootJar
-}
-
-pitest {
-    targetClasses = ['com.sysco.prime.*'] // TODO: Or fix `group`, above
-    threads = Runtime.runtime.availableProcessors()
 }
