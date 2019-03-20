@@ -1,0 +1,339 @@
+// Quirks:
+// - `annotationProcessor` is more correct for Gradle (eg, lombok), but IDEA does not grok it
+// - SpotBugs plugin does not (yet) support default location for config
+// - Fully excluding Joda still needs to work for testing with OpenSAML
+// - Can we use a Spring Boot configuration rather than synthetic `bootRuntime`?
+// - Update to spring-security-saml2-core:1.0.4.RELEASE after resolving transitive dependency issues; see https://spring.io/blog/2018/03/16/spring-security-saml-1-0-4-released
+
+buildscript {
+    ext {
+        checkstyleVersion = '8.15'
+        jacocoVersion = '0.8.2'
+        lombokVersion = '1.18.2'
+        spotbugsVersion = '3.1.7'
+        springBootVersion = '2.0.6.RELEASE'
+        swaggerVersion = '2.9.2'
+    }
+    repositories {
+        gradlePluginPortal()
+        mavenCentral()
+    }
+    dependencies {
+        classpath "org.springframework.boot:spring-boot-gradle-plugin:${springBootVersion}"
+    }
+}
+
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '2.0.5.RELEASE'
+    id 'io.spring.dependency-management' version '1.0.6.RELEASE'
+    id 'idea'
+    id 'jacoco'
+    id 'com.github.spotbugs' version '1.6.3'
+    id 'checkstyle'
+    id 'org.liquibase.gradle' version '2.0.1'
+    id 'org.sonarqube' version '2.6.2'
+    id 'com.palantir.docker' version '0.20.1'
+    id 'info.solidsoft.pitest' version '1.3.0'
+}
+
+group = 'com.sysco.prime.api'
+version = '0.1.0'
+sourceCompatibility = 1.8
+targetCompatibility = 1.8
+
+sourceSets {
+    databaseTest {
+        java {
+            compileClasspath += main.output + test.output
+            runtimeClasspath += main.output + test.output
+        }
+    }
+
+    integrationTest {
+        java {
+            compileClasspath += main.output + test.output
+            runtimeClasspath += main.output + test.output
+        }
+    }
+}
+
+configurations {
+    databaseTestCompileOnly.extendsFrom testCompileOnly
+    databaseTestCompile.extendsFrom testCompile
+    databaseTestRuntimeOnly.extendsFrom testRuntimeOnly
+    databaseTestRuntime.extendsFrom testRuntime
+
+    integrationTestCompileOnly.extendsFrom testCompileOnly
+    integrationTestCompile.extendsFrom testCompile
+    integrationTestRuntimeOnly.extendsFrom testRuntimeOnly
+    integrationTestRuntime.extendsFrom testRuntime
+
+    // https://docs.gradle.org/current/userguide/java_library_plugin.html
+    bootRuntime // Synthetic configuration for deps needed *only* to launch app
+    // TODO: Again exclude Joda, after solving problem for OpenSAML (test)
+    // compile.exclude group: 'joda-time' // Exclude during dev - needed at runtime (springfox)
+}
+
+idea {
+    module {
+        testSourceDirs += project.sourceSets.databaseTest.java.srcDirs
+        testSourceDirs += project.sourceSets.integrationTest.java.srcDirs
+        testResourceDirs += project.sourceSets.databaseTest.resources.srcDirs
+        testResourceDirs += project.sourceSets.integrationTest.resources.srcDirs
+        scopes.TEST.plus += [configurations.databaseTestRuntime, configurations.integrationTestRuntime]
+    }
+}
+
+repositories {
+    mavenCentral()
+    maven {
+        url 'https://syscobt.jfrog.io/syscobt/mvn/'
+        credentials {
+            username = System.getenv("JFROG_USERNAME") != null ? System.getenv("JFROG_USERNAME") : findProperty('jfrogUsername') ?: ''
+            password = System.getenv("JFROG_PASSWORD") != null ? System.getenv("JFROG_PASSWORD") : findProperty('jfrogPassword') ?: ''
+        }
+    }
+}
+
+// See https://github.com/spring-projects/spring-boot/issues/13986
+ext['lombok.version'] = ext.lombokVersion
+
+dependencies {
+    compile 'org.springframework.boot:spring-boot-starter-actuator'
+    compile 'org.springframework.boot:spring-boot-starter-data-jpa'
+    compile 'org.springframework.boot:spring-boot-starter-data-rest'
+    compile 'org.springframework.data:spring-data-rest-hal-browser'
+    compile 'org.springframework.boot:spring-boot-starter-security'
+    compile 'org.springframework.boot:spring-boot-starter-validation'
+    compile 'org.springframework.boot:spring-boot-starter-web'
+    compile 'org.springframework.boot:spring-boot-starter-webflux'
+    compile 'org.springframework.session:spring-session-jdbc:2.1.1.RELEASE'
+    compile 'org.liquibase:liquibase-core'
+    compile 'org.springframework.session:spring-session-core'
+    compile 'org.apache.poi:poi-ooxml:4.0.0'
+    compile "io.springfox:springfox-swagger2:${swaggerVersion}"
+    compile 'org.springframework.security.extensions:spring-security-saml2-core:1.0.3.RELEASE'
+    compile 'com.vladmihalcea:hibernate-types-5:2.3.0'
+    compile 'org.springframework.retry:spring-retry'
+    compile "com.github.spotbugs:spotbugs:${spotbugsVersion}"
+    compile 'org.apache.commons:commons-lang3:3.8' // TODO: Avoid
+    compile "org.springframework.security.oauth.boot:spring-security-oauth2-autoconfigure:2.0.5.RELEASE"
+    compile 'org.apache.httpcomponents:httpclient:4.5.6' // TODO: Avoid
+    compile 'sysco.honeywell:datamax-oneill:2.5.0'
+    compile 'com.launchdarkly:okhttp-eventsource:1.8.0'
+    compile 'org.apache.pdfbox:pdfbox:2.0.12'
+    compile 'com.amazonaws:amazon-sqs-java-messaging-lib:1.0.4'
+    compile group: 'org.apache.commons', name: 'commons-csv', version: '1.6'
+
+    runtime 'org.springframework.boot:spring-boot-properties-migrator' // TODO: Workaround
+    runtime 'org.springframework.boot:spring-boot-devtools'
+    runtime 'org.postgresql:postgresql'
+    runtime "io.springfox:springfox-swagger-ui:${swaggerVersion}"
+
+    compileOnly 'org.springframework.boot:spring-boot-configuration-processor'
+    compileOnly 'org.projectlombok:lombok'
+    compileOnly "com.github.spotbugs:spotbugs-annotations:${spotbugsVersion}"
+
+    testCompile 'org.springframework.boot:spring-boot-starter-test'
+    testCompile 'io.projectreactor:reactor-test'
+    testCompile 'org.springframework.security:spring-security-test'
+    testCompile 'io.rest-assured:rest-assured:3.2.0'
+    testCompile 'org.assertj:assertj-core:3.11.1'
+
+    testRuntime 'joda-time:joda-time' // OpenSAML TODO: Rework configurations/dependencies
+    bootRuntime 'joda-time:joda-time' // Springfox TODO: Rework configurations/dependencies
+
+    testCompileOnly 'org.projectlombok:lombok'
+
+    liquibaseRuntime 'org.liquibase:liquibase-core'
+    liquibaseRuntime 'org.postgresql:postgresql'
+}
+
+defaultTasks 'clean', 'build'
+
+clean {
+    delete fileTree('.') {
+        include '*.log'
+    }
+}
+
+tasks.withType(JavaCompile) {
+    options.encoding = 'UTF-8'
+    options.compilerArgs += ['-Xlint:all,-processing,-serial', '-Werror']
+}
+
+task databaseTest(type: Test) {
+    group = 'verification'
+    description = 'Runs database tests.'
+    testClassesDirs = sourceSets.databaseTest.output.classesDirs
+    classpath = sourceSets.databaseTest.runtimeClasspath
+    shouldRunAfter test
+}
+
+task integrationTest(type: Test) {
+    group = 'verification'
+    description = 'Runs API integration tests.'
+    testClassesDirs = sourceSets.integrationTest.output.classesDirs
+    classpath = sourceSets.integrationTest.runtimeClasspath
+    shouldRunAfter databaseTest
+}
+
+task apiTest(type: Exec) {
+    group 'verification'
+    description 'Runs the API tests locally.'
+    workingDir 'api-test'
+    commandLine './dev-local-run-api-tests'
+}
+
+jacoco {
+    toolVersion = jacocoVersion
+}
+
+jacocoTestReport {
+    sourceSets sourceSets.main
+    executionData test, databaseTest, integrationTest
+
+    reports {
+        csv.enabled = false
+        html.enabled = true
+        xml.enabled = false
+    }
+
+    afterEvaluate {
+        files(classDirectories.files.collect {
+            fileTree(dir: it, exclude: excludedFiles)
+        })
+    }
+
+    dependsOn test, databaseTest, integrationTest
+}
+
+jacocoTestCoverageVerification {
+    violationRules {
+        rule {
+            limit {
+                counter = 'INSTRUCTION'
+                minimum = 0.93
+            }
+        }
+        rule {
+            limit {
+                counter = 'BRANCH'
+                minimum = 0.86
+            }
+        }
+        rule {
+            limit {
+                counter = 'LINE'
+                minimum = 0.94
+            }
+        }
+        rule {
+            limit {
+                element = 'CLASS'
+                counter = 'LINE'
+                minimum = 0.00
+            }
+        }
+    }
+
+    afterEvaluate {
+        classDirectories = files(classDirectories.files.collect {
+            fileTree(dir: it, excludes: excludedFiles)
+        })
+    }
+
+    dependsOn jacocoTestReport
+}
+
+spotbugs {
+    toolVersion = spotbugsVersion
+    // TODO: Remove configuration after https://github.com/spotbugs/spotbugs-gradle-plugin/issues/5 closed
+    excludeFilter = file("${project.rootDir}/config/spotbugs/excludeFilter.xml")
+}
+
+tasks.withType(com.github.spotbugs.SpotBugsTask) {
+    showProgress = false
+
+    reports {
+        xml.enabled false
+        html.enabled true
+    }
+}
+
+checkstyle {
+    toolVersion = checkstyleVersion
+}
+
+tasks.withType(Checkstyle) {
+    maxWarnings = 0
+
+    reports {
+        html.enabled = true
+        xml.enabled = false
+    }
+}
+
+liquibase {
+    /* For rollback, try `./run-prime.sh rollback-liquibase 1`  # rollsback most recent changelog */
+    activities {
+        test {
+            changeLogFile 'src/main/resources/data/changelog/db.changelog-master.xml'
+            classpath 'src/main/resources'
+            url 'jdbc:postgresql://localhost/prime-test?useSSL=false&currentSchema=public'
+            username 'primeApp'
+            password 'password'
+        }
+
+        run {
+            changeLogFile 'src/main/resources/data/changelog/db.changelog-master.xml'
+            classpath 'src/main/resources'
+            url 'jdbc:postgresql://localhost/prime?useSSL=false&currentSchema=public'
+            username 'primeApp'
+            password 'password'
+        }
+    }
+}
+
+sonarqube {
+    properties {
+        property "sonar.host.url", System.getenv("SONAR_HOST")
+        property "sonar.projectKey", "com.sysco.prime.api:prime-api"
+        property "sonar.projectName", "Prime API"
+        properties["sonar.tests"] += sourceSets.databaseTest.allJava.srcDirs
+        properties["sonar.tests"] += sourceSets.integrationTest.allJava.srcDirs
+        property "sonar.exclusions", excludedFiles.collect { filename -> filename.replace("com/sysco/", "**/") }.join(",")
+        property "sonar.coverage.exclusions", excludedFiles.collect { filename -> filename.replace("com/sysco/", "**/") }.join(",")
+    }
+}
+
+check {
+    dependsOn jacocoTestCoverageVerification
+}
+
+bootJar {
+    bootInf {
+        from configurations.bootRuntime
+        into 'lib'
+    }
+}
+
+bootRun {
+    classpath += configurations.bootRuntime
+    systemProperties += System.properties  // Let's you say simply "gradle -Dfoo=bar bootRun"
+}
+
+docker {
+    name 'sysco/prime-api:0.1.0-local'
+    dockerfile file('docker/run-app/Dockerfile')
+    files bootJar.outputs
+    copySpec.into('build/libs')
+
+    dependsOn bootJar
+}
+
+pitest {
+    targetClasses = ['com.sysco.prime.*'] // TODO: Or fix `group`, above
+    threads = Runtime.runtime.availableProcessors()
+}

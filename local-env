@@ -1,0 +1,3 @@
+export PGHOST=localhost
+export PGUSER=admin
+export PGPASSWORD=password
